@@ -21,8 +21,10 @@ contract FundMe {
     mapping(address => uint256) public addressToAmountFunded;
     address[] public funders;
     address public owner;
+    AggregatorV3Interface public priceFeed;
 
-    constructor() {
+    constructor (address _priceFeed) public {
+        priceFeed = AggregatorV3Interface(_priceFeed);
         owner = msg.sender;
     }
 
@@ -37,17 +39,11 @@ contract FundMe {
     }
 
     function getVersion() public view returns (uint256) {
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(
-            0x694AA1769357215DE4FAC081bf1f309aDC325306
-        );
         return priceFeed.version();
     }
 
     function getPrice() public view returns (uint256) {
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(
-            0x694AA1769357215DE4FAC081bf1f309aDC325306
-        );
-        (, int256 answer, , , ) = priceFeed.latestRoundData();
+      (, int256 answer, , , ) = priceFeed.latestRoundData();
         return uint256(answer * 10000000000);
     }
 
@@ -57,13 +53,22 @@ contract FundMe {
         return ethAmountInUsd;
     }
 
+    function getEntranceFee() public view returns (uint256) {
+        uint256 minimumUSD = 50 * 10**18;
+        uint256 price = getPrice();
+        uint256 precision = 1 * 10**18;
+        return (minimumUSD * precision) / price;
+    }
+
     modifier onlyOwner() {
         require(msg.sender == owner);
         _;
     }
 
-    function withdraw() public payable onlyOwner {
-        payable(msg.sender).transfer(address(this).balance);
+    function withdraw() 
+        public payable onlyOwner {
+        (bool success, ) = payable(msg.sender).call{value: address(this).balance}("");
+        require(success, "Transfer failed");
         for (uint256 i = 0; i < funders.length; i++) {
             addressToAmountFunded[funders[i]] = 0;
         }
